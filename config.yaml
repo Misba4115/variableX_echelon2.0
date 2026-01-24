@@ -1,0 +1,63 @@
+# ===========================================
+# AUTONOMOUS SILVER PREDICTION AGENT
+# Configuration File
+# ===========================================
+
+# Agent Settings
+agent:
+  name: "Silver Scout Agent"
+  version: "1.0.0"
+  poll_interval_seconds: 300  # 5 minutes
+  max_retries: 3
+  retry_delay_seconds: 60
+
+# Data Sources - Metals & Silver
+metals:
+  tickers:
+    - symbol: "XAG"
+      name: "Silver Spot Price"
+      currency: "USD"
+    - symbol: "XAU"
+      name: "Gold Spot Price (for correlation)"
+      currency: "USD"
+  
+  apis:
+    - name: "metals-api"
+      base_url: "https://metals-api.com/api"
+      endpoints:
+        latest: "/latest"
+        historical: "/timeseries"
+    
+# News Sources for Sentiment Analysis
+news_sources:
+  - name: "Kitco News"
+    url: "https://www.kitco.com/news/silver"
+    type: "scrape"
+  
+  - name: "Reuters Commodities"
+    url: "https://www.reuters.com/markets/commodities/"
+    type: "scrape"
+
+# Scraping Configuration
+scraper:
+  headless: true
+  timeout_ms: 30000
+  user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+
+# Dashboard Settings
+dashboard:
+  title: "Silver Prediction Agent Dashboard"
+  refresh_interval_seconds: 60
+  charts:
+    - type: "line"
+      metric: "silver_price"
+      timeframe_days: 30
+    - type: "bar"
+      metric: "sentiment_score"
+      timeframe_days: 7
+
+# Logging
+logging:
+  level: "INFO"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  file: "logs/agent.log"

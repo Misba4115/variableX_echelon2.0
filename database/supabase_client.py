@@ -32,9 +32,14 @@ def targets():
     return get_client().table("targets")
 
 
-def market_data():
-    """Access the market_data table."""
-    return get_client().table("market_data")
+def price_data():
+    """Access the price_data table."""
+    return get_client().table("price_data")
+
+
+def news_data():
+    """Access the news_data table."""
+    return get_client().table("news_data")
 
 
 def agent_logs():

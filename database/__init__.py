@@ -1,9 +1,7 @@
 """
-Database module for Autonomous Silver Prediction Agent.
-Handles Supabase connections and data persistence.
+Database module - Simple Supabase client.
 """
 
-from .db_client import SupabaseClient
-from .state_manager import StateManager
+from .supabase_client import supabase, get_client, targets, market_data, agent_logs
 
-__all__ = ["SupabaseClient", "StateManager"]
+__all__ = ["supabase", "get_client", "targets", "market_data", "agent_logs"]

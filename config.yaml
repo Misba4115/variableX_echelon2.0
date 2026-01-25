@@ -6,43 +6,35 @@
 # Agent Settings
 agent:
   name: "Silver Scout Agent"
-  version: "1.0.0"
+  version: "2.0.0"
   poll_interval_seconds: 300  # 5 minutes
   max_retries: 3
   retry_delay_seconds: 60
 
-# Data Sources - Metals & Silver
-metals:
-  tickers:
-    - symbol: "XAG"
-      name: "Silver Spot Price"
-      currency: "USD"
-    - symbol: "XAU"
-      name: "Gold Spot Price (for correlation)"
-      currency: "USD"
+# Stock Data Sources (StockAgent)
+stock_sources:
+  - name: "alpha_vantage"
+    provider: "Alpha Vantage"
+    symbol: "SLV"
+    currency: "USD"
   
-  apis:
-    - name: "metals-api"
-      base_url: "https://metals-api.com/api"
-      endpoints:
-        latest: "/latest"
-        historical: "/timeseries"
-    
-# News Sources for Sentiment Analysis
+  - name: "finnhub"
+    provider: "Finnhub"
+    symbol: "SLV"
+    currency: "USD"
+
+# News Sources (NewsAgent)
 news_sources:
-  - name: "Kitco News"
-    url: "https://www.kitco.com/news/silver"
-    type: "scrape"
-  
-  - name: "Reuters Commodities"
-    url: "https://www.reuters.com/markets/commodities/"
+  - name: "silverseek_news"
+    url: "https://silverseek.com/articles/silver-market-updates"
     type: "scrape"
 
-# Scraping Configuration
-scraper:
-  headless: true
-  timeout_ms: 30000
-  user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+# LLM Configuration (GenerativeEnhancer)
+llm:
+  provider: "openai"
+  model: "gpt-4"
+  temperature: 0.3
+  max_tokens: 150
 
 # Dashboard Settings
 dashboard:

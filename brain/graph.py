@@ -85,6 +85,7 @@ class SilverAgentGraph:
     
     async def _collect_node(self, state: AgentGraphState) -> AgentGraphState:
     from scraper.metals_api import MetalsAPI
+    from scraper.web_scraper import WebScraper # Ensure this matches your file name
     
     try:
         # The Brain calls the API class which now handles its own fallback

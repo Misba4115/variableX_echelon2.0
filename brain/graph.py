@@ -84,26 +84,24 @@ class SilverAgentGraph:
         pass
     
     async def _collect_node(self, state: AgentGraphState) -> AgentGraphState:
-        """
-        Collection node: Gather price and news data.
-        """
-        from scraper.metals_api import MetalsAPI
-        from scraper.web_scraper import WebScraper
-        
-        try:
-            # Get price data
-            with MetalsAPI() as api:
-                price_data = api.get_silver_price()
-            
-            state["price_data"] = price_data
-            state["current_step"] = "collect_complete"
-            state["last_updated"] = datetime.utcnow().isoformat()
-            
-        except Exception as e:
-            state["errors"].append(f"Collection error: {str(e)}")
-        
-        return state
+    from scraper.metals_api import MetalsAPI
     
+    try:
+        # The Brain calls the API class which now handles its own fallback
+        with MetalsAPI() as api:
+            price_result = api.get_silver_price()
+            state["price_data"] = price_result
+            
+            # Log the source so the Dashboard can show if we are on 'Fallback' mode
+            if price_result.get("status") == "warning":
+                state["messages"].append(f"System: Switched to {price_result['source']}")
+
+        state["current_step"] = "collect_complete"
+    except Exception as e:
+        state["errors"].append(f"Critical Collection failure: {str(e)}")
+    
+    return state
+
     async def _analyze_node(self, state: AgentGraphState) -> AgentGraphState:
         """
         Analysis node: Process collected data.

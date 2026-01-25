@@ -11,6 +11,14 @@ agent:
   max_retries: 3
   retry_delay_seconds: 60
 
+# Brain Agent Trigger Settings
+brain_trigger:
+  enabled: true
+  auto_trigger: true           # Auto-trigger when threshold met
+  min_total_fresh_entries: 15  # Minimum fresh entries (price + news combined)
+  check_interval_minutes: 10   # How often to check entry counts
+
+
 # Stock Data Sources (StockAgent)
 stock_sources:
   - name: "alpha_vantage"

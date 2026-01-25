@@ -10,6 +10,14 @@ from .quality_tracker import QualityTracker, update_quality_after_scrape
 from .triggers import EventDrivenTrigger, should_collect_now, get_collection_reason
 from .freshness import FreshnessManager, get_fresh_data, cleanup_old_data, check_freshness
 from .watchdog import Watchdog, create_watchdog
+from .brain_trigger import (
+    check_brain_ready, 
+    get_fresh_entry_counts, 
+    should_trigger_brain,
+    trigger_brain_agent,
+    trigger_brain_agent_sync
+)
+
 
 __all__ = [
     # Priority & Budget
@@ -40,8 +48,16 @@ __all__ = [
     
     # Watchdog
     "Watchdog",
-    "create_watchdog"
+    "create_watchdog",
+    
+    # Brain Trigger
+    "check_brain_ready",
+    "get_fresh_entry_counts",
+    "should_trigger_brain",
+    "trigger_brain_agent",
+    "trigger_brain_agent_sync"
 ]
+
 
 
 

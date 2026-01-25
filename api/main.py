@@ -24,7 +24,10 @@ from controller import (
     get_all_priorities,
     check_freshness,
     get_fresh_data,
-    create_watchdog
+    create_watchdog,
+    check_brain_ready,
+    get_fresh_entry_counts,
+    trigger_brain_agent
 )
 
 # Import database and LLM modules
@@ -78,6 +81,19 @@ class HealthResponse(BaseModel):
     status: str
     version: str
     database_connected: bool
+
+
+class BrainReadinessResponse(BaseModel):
+    """Brain agent readiness response."""
+    ready: bool
+    total_fresh_entries: int
+    price_entries: int
+    news_entries: int
+    threshold: int
+    remaining: int
+    message: str
+    auto_trigger: bool
+    timestamp: str
 
 
 class PredictionRequest(BaseModel):
@@ -146,8 +162,13 @@ app.add_middleware(
 # app.include_router(test_router)
 
 # Include scraper execution routes
-from api.scraper_routes import router as scraper_router
-app.include_router(scraper_router)
+try:
+    from api.scraper_routes import router as scraper_router
+    app.include_router(scraper_router)
+except Exception as e:
+    print("⚠️  Warning: failed to include scraper routes:", e)
+    import traceback
+    traceback.print_exc()
 
 # Global state
 watchdog_instance = None
@@ -294,6 +315,68 @@ async def get_fresh_data_endpoint():
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/brain/ready", response_model=BrainReadinessResponse, tags=["Brain Agent"])
+async def get_brain_readiness():
+    """
+    Check if brain agent is ready to run (has enough data entries).
+    
+    Returns:
+    - ready: Whether brain agent can run
+    - total_fresh_entries: Total fresh entries in database
+    - threshold: Minimum entries required
+    - remaining: How many more entries needed
+    """
+    try:
+        is_ready, details = check_brain_ready()
+        
+        return {
+            "ready": details.get('ready', False),
+            "total_fresh_entries": details.get('total_fresh_entries', 0),
+            "price_entries": details.get('price_entries', 0),
+            "news_entries": details.get('news_entries', 0),
+            "threshold": details.get('threshold', 15),
+            "remaining": details.get('remaining', 0),
+            "message": details.get('message', ''),
+            "auto_trigger": details.get('auto_trigger', True),
+            "timestamp": details.get('timestamp', datetime.now().isoformat())
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/brain/trigger", tags=["Brain Agent"])
+async def trigger_brain():
+    """
+    Manually trigger the brain agent.
+    
+    The brain agent will only run if sufficient data exists.
+    Returns prediction results if successful.
+    """
+    try:
+        result = await trigger_brain_agent()
+        
+        if not result.get('success', False):
+            return {
+                "success": False,
+                "triggered": result.get('triggered', False),
+                "message": result.get('reason', 'Unknown error'),
+                "details": result.get('entry_details', {})
+            }
+        
+        return {
+            "success": True,
+            "triggered": True,
+            "message": "Brain agent executed successfully",
+            "prediction": result.get('prediction'),
+            "data_used": result.get('data_used'),
+            "entry_details": result.get('entry_details')
+        }
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Brain trigger failed: {str(e)}")
 
 
 @app.post("/api/predict", response_model=PredictionResponse, tags=["Prediction"])

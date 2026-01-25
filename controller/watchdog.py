@@ -120,6 +120,7 @@ def create_watchdog() -> Watchdog:
     Create a watchdog connected to the existing collection logic.
     """
     from .scheduler import run_collection_cycle
+    from .brain_trigger import check_brain_ready, trigger_brain_agent_sync
     
     def on_trigger(trigger: Trigger):
         """When watchdog fires, run the collection cycle."""
@@ -135,6 +136,28 @@ def create_watchdog() -> Watchdog:
                 print(f"   • {source['name']}: {source['allocated_calls']} calls")
         else:
             print(f"   {plan.get('message', 'No collection needed')}")
+        
+        # After collection, check if brain agent should run
+        print("\n🧠 Checking brain agent readiness...")
+        is_ready, details = check_brain_ready()
+        
+        if is_ready and details.get('auto_trigger', True):
+            print(f"✅ {details.get('message')}")
+            print("🚀 Auto-triggering brain agent...")
+            
+            try:
+                result = trigger_brain_agent_sync()
+                if result.get('success'):
+                    print(f"✅ Brain agent prediction complete!")
+                    prediction = result.get('prediction', {})
+                    print(f"   Decision: {prediction.get('decision')}")
+                    print(f"   Target: ${prediction.get('target_price')}")
+                else:
+                    print(f"⚠️  Brain agent did not run: {result.get('reason')}")
+            except Exception as e:
+                print(f"❌ Brain agent error: {e}")
+        else:
+            print(f"ℹ️  {details.get('message')}")
     
     return Watchdog(on_trigger=on_trigger)
 

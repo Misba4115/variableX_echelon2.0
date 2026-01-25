@@ -1,0 +1,43 @@
+┌─────────────────────────────────────────────────────────────────────────┐
+│                           DATA FLOW                                      │
+└─────────────────────────────────────────────────────────────────────────┘
+
+  ┌──────────────┐
+  │   TARGETS    │  ← You seed initial URLs/APIs here
+  │   (table)    │
+  └──────┬───────┘
+         │
+         │ Scraper reads from targets
+         ▼
+  ┌──────────────┐
+  │   SCRAPER    │  • web_scraper.py → scrapes news URLs
+  │   (module)   │  • metals_api.py → fetches silver prices
+  └──────┬───────┘
+         │
+         │ Stores scraped data
+         ▼
+  ┌──────────────┐
+  │ MARKET_DATA  │  ← Prices, news headlines, sentiment stored here
+  │   (table)    │
+  └──────┬───────┘
+         │
+         │ Brain reads collected data
+         ▼
+  ┌──────────────┐
+  │    BRAIN     │  • LangGraph state machine
+  │   (module)   │  • LLM analyzes data → generates predictions
+  └──────┬───────┘
+         │
+         │ Stores reasoning & predictions
+         ▼
+  ┌──────────────┐
+  │ AGENT_LOGS   │  ← Decisions, predictions, confidence scores
+  │   (table)    │
+  └──────┴───────┘
+         │
+         │ Dashboard reads for display
+         ▼
+  ┌──────────────┐
+  │  DASHBOARD   │  • Shows prices, news, predictions
+  │  (Streamlit) │  • Visualizes agent activity
+  └──────────────┘

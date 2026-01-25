@@ -55,3 +55,10 @@ Thumbs.db
 # Temporary files
 *.tmp
 *.temp
+
+# Test files and outputs
+test_*.json
+test_*.py
+example_*.py
+*_output.json
+setup_api_key.py

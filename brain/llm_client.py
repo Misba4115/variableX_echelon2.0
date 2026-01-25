@@ -176,7 +176,7 @@ Include:
         
         # Format news items
         news_text = "\n".join([
-            f"{i+1}. {item.get('title', 'N/A')}"
+            f"{i+1}. {json.dumps(item.get('raw_data', {}))}"
             for i, item in enumerate(news_items[:20])  # Limit to 20 items
         ])
         

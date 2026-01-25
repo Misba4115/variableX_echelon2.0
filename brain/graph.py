@@ -109,7 +109,7 @@ class SilverAgentGraph:
         
         try:
             # Get latest price data from DB
-            print("📊 Fetching silver price data from DB...")
+            print("Fetching silver price data from DB...")
             try:
                 # Get latest price record
                 response = price_data().select("*").order("fetched_at", desc=True).limit(1).execute()
@@ -122,19 +122,19 @@ class SilverAgentGraph:
                 
                 state["price_data"] = latest_price
             except Exception as e:
-                print(f"⚠️  Could not fetch price data: {str(e)}")
+                print(f"Could not fetch price data: {str(e)}")
                 state["errors"].append(f"Price DB error: {str(e)}")
                 state["price_data"] = {}
             
             # Get latest news data from DB
-            print("📰 Fetching silver news from DB...")
+            print("Fetching silver news from DB...")
             news_items = []
             try:
                 # Fetch recent news
                 response = news_data().select("*").order("fetched_at", desc=True).limit(10).execute()
                 news_items = response.data if response.data else []
             except Exception as e:
-                print(f"⚠️  Could not fetch news data: {str(e)}")
+                print(f"Could not fetch news data: {str(e)}")
                 state["errors"].append(f"News DB error: {str(e)}")
             
             state["news_data"] = news_items
@@ -148,12 +148,12 @@ class SilverAgentGraph:
                 "timestamp": datetime.utcnow().isoformat()
             })
             
-            print(f"✅ Collection complete: Price=${state['price_data'].get('price', 'N/A')}, News={len(news_items)} items")
+            print(f"Collection complete: Price=${state['price_data'].get('price', 'N/A')}, News={len(news_items)} items")
             
         except Exception as e:
             error_msg = f"Collection error: {str(e)}"
             state["errors"].append(error_msg)
-            print(f"❌ {error_msg}")
+            print(f" {error_msg}")
         
         state["last_updated"] = datetime.utcnow().isoformat()
         return state
@@ -172,7 +172,7 @@ class SilverAgentGraph:
         })
         
         try:
-            print("🤔 Analyzing market data...")
+            print("Analyzing market data...")
             
             # Initialize LLM client if not provided
             if not self.llm_client:
@@ -209,14 +209,14 @@ class SilverAgentGraph:
                 "timestamp": datetime.utcnow().isoformat()
             })
             
-            print(f"✅ Analysis complete: Sentiment={news_sentiment.get('overall_sentiment', 'N/A')}")
+            print(f"Analysis complete: Sentiment={news_sentiment.get('overall_sentiment', 'N/A')}")
             
         except Exception as e:
             error_msg = f"Analysis error: {str(e)}"
             state["errors"].append(error_msg)
             state["price_analysis"] = f"Analysis failed: {str(e)}"
             state["news_sentiment"] = {"overall_sentiment": "neutral", "error": str(e)}
-            print(f"❌ {error_msg}")
+            print(f" {error_msg}")
         
         state["last_updated"] = datetime.utcnow().isoformat()
         return state
@@ -235,7 +235,7 @@ class SilverAgentGraph:
         })
         
         try:
-            print("🔮 Generating prediction...")
+            print("Generating prediction...")
             
             # Initialize LLM client if not provided
             if not self.llm_client:
@@ -261,7 +261,7 @@ class SilverAgentGraph:
                 "timestamp": datetime.utcnow().isoformat()
             })
             
-            print(f"✅ Prediction: {prediction.get('decision', 'N/A').upper()} "
+            print(f"Prediction: {prediction.get('decision', 'N/A').upper()} "
                   f"(confidence: {state['confidence']:.2f})")
             
         except Exception as e:
@@ -274,7 +274,7 @@ class SilverAgentGraph:
                 "reasoning_chain": "Prediction failed due to error"
             }
             state["confidence"] = 0.0
-            print(f"❌ {error_msg}")
+            print(f" {error_msg}")
         
         state["last_updated"] = datetime.utcnow().isoformat()
         return state
@@ -290,7 +290,7 @@ class SilverAgentGraph:
         })
         
         try:
-            print("💾 Logging results...")
+            print("Logging results...")
             
             if self.db_client and state.get("prediction"):
                 self.db_client.log_agent_action({
@@ -306,9 +306,9 @@ class SilverAgentGraph:
                     "created_at": datetime.utcnow().isoformat()
                 })
                 
-                print("✅ Results logged to database")
+                print("Results logged to database")
             else:
-                print("⚠️  Database not available, results not persisted")
+                print("Database not available, results not persisted")
             
             state["current_step"] = "complete"
             state["messages"].append({
@@ -320,7 +320,7 @@ class SilverAgentGraph:
         except Exception as e:
             error_msg = f"Logging error: {str(e)}"
             state["errors"].append(error_msg)
-            print(f"❌ {error_msg}")
+            print(f" {error_msg}")
         
         state["last_updated"] = datetime.utcnow().isoformat()
         return state
@@ -352,7 +352,7 @@ class SilverAgentGraph:
         Returns:
             Final agent state after execution
         """
-        print("🚀 Starting Silver Prediction Agent...")
+        print("Starting Silver Prediction Agent...")
         print(f"Session ID: {session_id or 'auto-generated'}")
         print("-" * 60)
         
@@ -362,13 +362,13 @@ class SilverAgentGraph:
         if not self._graph:
             try:
                 self._build_graph()
-                print("✅ LangGraph state machine initialized")
+                print("LangGraph state machine initialized")
                 
                 # Execute using LangGraph
                 result = await self._graph.ainvoke(state)
                 return result
             except ImportError:
-                print("⚠️  LangGraph not available, using sequential execution")
+                print("LangGraph not available, using sequential execution")
         
         # Fallback: Execute nodes sequentially without LangGraph
         state = await self._collect_node(state)
@@ -377,6 +377,6 @@ class SilverAgentGraph:
         state = await self._log_node(state)
         
         print("-" * 60)
-        print("✅ Agent execution complete!")
+        print("Agent execution complete!")
         
         return state

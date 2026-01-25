@@ -6,7 +6,7 @@ import os
 import json
 
 # ==============================================================================
-# 🛠️ DEMO DATA CONFIGURATION
+# DEMO DATA CONFIGURATION
 # Modify these values to test how the Brain reacts to different scenarios!
 # ==============================================================================
 DEMO_DATA = {
@@ -14,11 +14,18 @@ DEMO_DATA = {
     "INPUT": {
         "price": {
             "price": 31.50,
-            "currency": "USD"
+            "currency": "USD",
+            "raw_data": {"symbol": "XAGUSD", "bid": 31.45, "ask": 31.55}
         },
         "news": {
             "title": "Industrial demand spikes for Silver",
-            "source_url": "example.com"
+            "source_url": "example.com",
+            "raw_data": {
+                "headline": "Silver industrial demand hits record high in 2025",
+                "summary": "Renewable energy sectors drive unprecedented demand for silver paste in solar panels.",
+                "sentiment_label": "bullish",
+                "impact_score": 9.2
+            }
         }
     },
     
@@ -28,7 +35,9 @@ DEMO_DATA = {
         "sentiment": {
             "overall_sentiment": "positive",
             "sentiment_score": 0.8,
-            "summary": "Market sentiment is bullish due to industrial demand."
+            "summary": "Market sentiment is bullish due to industrial demand.",
+            "key_headlines": ["Silver industrial demand hits record high in 2025"],
+            "potential_impact": "high"
         }
     },
     
@@ -36,8 +45,11 @@ DEMO_DATA = {
     "PREDICTION": {
         "decision": "bullish",
         "price_target": 32.50,
+        "price_range": {"low": 31.00, "high": 33.00},
         "confidence_score": 0.9,
-        "reasoning_chain": "Strong technicals matched with positive news flow."
+        "reasoning_chain": "Strong technicals matched with positive news flow from industrial sectors.",
+        "key_factors": ["Solar panel demand", "Technical breakout"],
+        "risks": ["Fed interest rate hikes"]
     }
 }
 # ==============================================================================
@@ -67,7 +79,6 @@ from brain.graph import SilverAgentGraph
 def mock_llm_chain(messages, **kwargs):
     """
     Simulates the LLM's thought process.
-    It doesn't actually think; it just returns the pre-defined DEMO_DATA.
     """
     # This function is not used when we mock high-level client methods,
     # but kept here for reference if we switch to lower-level mocking.
@@ -79,9 +90,9 @@ def mock_llm_chain(messages, **kwargs):
 class TestSilverAgent(unittest.IsolatedAsyncioTestCase):
     
     async def test_demo_scenario(self):
-        print("\n🧪 STARTING AGENT TEST WITH DEMO DATA")
+        print("\nSTARTING AGENT TEST WITH DEMO DATA")
         print("="*60)
-        print(f"Scenario Input: Price=${DEMO_DATA['INPUT']['price']['price']}, News='{DEMO_DATA['INPUT']['news']['title']}'")
+        print(f"Scenario Input: Price=${DEMO_DATA['INPUT']['price']['price']}, Headline='{DEMO_DATA['INPUT']['news']['raw_data']['headline']}'")
         
         # --- A. Mock Database Queries ---
         # 1. Mock Price Response
@@ -125,29 +136,39 @@ class TestSilverAgent(unittest.IsolatedAsyncioTestCase):
             final_state = await agent.run(session_id="demo-session-001")
             
             # --- E. Assertions ---
-            print("\n✅ VERIFYING RESULTS")
+            print("\nVERIFYING RESULTS")
             print("-" * 30)
             
-            # 1. Output Matches Demo Prediction
-            expected_decision = DEMO_DATA["PREDICTION"]["decision"]
-            actual_decision = final_state.get("prediction", {}).get("decision")
+            # 1. Prediction data checks
+            pred = final_state.get("prediction", {})
+            self.assertEqual(pred.get("decision"), DEMO_DATA["PREDICTION"]["decision"])
+            self.assertEqual(pred.get("price_target"), DEMO_DATA["PREDICTION"]["price_target"])
+            self.assertEqual(pred.get("confidence_score"), DEMO_DATA["PREDICTION"]["confidence_score"])
+            self.assertIn("Solar panel demand", pred.get("key_factors", []))
             
-            self.assertEqual(actual_decision, expected_decision)
-            print(f"PASS: Brain decided '{actual_decision}' (Matches Demo Data)")
+            print(f"PASS: Prediction values verified (Decision: {pred.get('decision')})")
 
-            # 2. DB Capture Matches Schema
+            # 2. DB Capture Matches Schema (Agent Logs)
             mock_db_client.log_agent_action.assert_called_once()
             log_payload = mock_db_client.log_agent_action.call_args[0][0]
             
-            self.assertEqual(log_payload['decision'], expected_decision)
+            self.assertEqual(log_payload['session_id'], "demo-session-001")
+            self.assertEqual(log_payload['decision'], DEMO_DATA["PREDICTION"]["decision"])
             self.assertEqual(log_payload['confidence_score'], DEMO_DATA["PREDICTION"]["confidence_score"])
+            self.assertIn("Solar panel demand", str(log_payload['prediction_value']))
+            self.assertIn(DEMO_DATA["ANALYSIS"]["market"], log_payload['reasoning_chain'])
             
-            print(f"PASS: Correctly logged to database:")
-            print(f"  -> Decision: {log_payload['decision']}")
-            print(f"  -> Confidence: {log_payload['confidence_score']}")
-            print(f"  -> Reasoning: {log_payload['reasoning_chain']}")
+            print(f"PASS: Correctly logged to 'agent_logs':")
+            print(f"  -> Session ID: {log_payload['session_id']}")
+            print(f"  -> Raw Response Captured: {bool(log_payload['raw_response'])}")
+            print(f"  -> Full Reasoning Chain logged: Yes")
             
-            print("\n🎉 DEMO TEST COMPLETED SUCCESSFULLY")
+            # 3. Verify news data was collected
+            self.assertEqual(len(final_state["news_data"]), 1)
+            self.assertIn("headline", final_state["news_data"][0]["raw_data"])
+            print(f"PASS: News 'raw_data' successfully collected and passed to brain")
+            
+            print("\nDEMO TEST COMPLETED SUCCESSFULLY")
 
 if __name__ == "__main__":
     unittest.main()

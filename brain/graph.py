@@ -49,99 +49,280 @@ class SilverAgentGraph:
     4. LOG: Store results and reasoning
     """
     
-    def __init__(self, db_client=None, state_manager=None):
+    def __init__(self, db_client=None, state_manager=None, llm_client=None):
         """
         Initialize the agent graph.
         
         Args:
             db_client: Database client for persistence
             state_manager: State manager for tracking
+            llm_client: LLM client for analysis (optional, will create if not provided)
         """
         self.db_client = db_client
         self.state_manager = state_manager
+        self.llm_client = llm_client
         self._graph = None
         
     def _build_graph(self):
         """
         Build the LangGraph state machine.
-        
-        Note: This is a template - full implementation requires
-        langgraph package and OpenAI API key.
         """
-        # Placeholder for graph construction
-        # In full implementation:
-        # from langgraph.graph import StateGraph
-        # graph = StateGraph(AgentGraphState)
-        # graph.add_node("collect", self._collect_node)
-        # graph.add_node("analyze", self._analyze_node)
-        # graph.add_node("predict", self._predict_node)
-        # graph.add_node("log", self._log_node)
-        # graph.add_edge("collect", "analyze")
-        # graph.add_edge("analyze", "predict")
-        # graph.add_edge("predict", "log")
-        # graph.set_entry_point("collect")
-        # self._graph = graph.compile()
-        pass
-    
+        try:
+            from langgraph.graph import StateGraph, END
+        except ImportError:
+            raise ImportError(
+                "langgraph package not installed. Run: pip install langgraph"
+            )
+        
+        # Create state graph
+        graph = StateGraph(AgentGraphState)
+        
+        # Add nodes
+        graph.add_node("collect", self._collect_node)
+        graph.add_node("analyze", self._analyze_node)
+        graph.add_node("predict", self._predict_node)
+        graph.add_node("log", self._log_node)
+        
+        # Define edges
+        graph.add_edge("collect", "analyze")
+        graph.add_edge("analyze", "predict")
+        graph.add_edge("predict", "log")
+        graph.add_edge("log", END)
+        
+        # Set entry point
+        graph.set_entry_point("collect")
+        
+        # Compile the graph
+        self._graph = graph.compile()
+        
     async def _collect_node(self, state: AgentGraphState) -> AgentGraphState:
         """
-        Collection node: Gather price and news data.
+        Collection node: Gather price and news data from database.
         """
-        from scraper.metals_api import MetalsAPI
-        from scraper.web_scraper import WebScraper
+        from database import price_data, news_data
+        
+        state["messages"].append({
+            "step": "collect",
+            "status": "started",
+            "timestamp": datetime.utcnow().isoformat()
+        })
         
         try:
-            # Get price data
-            with MetalsAPI() as api:
-                price_data = api.get_silver_price()
+            # Get latest price data from DB
+            print("📊 Fetching silver price data from DB...")
+            try:
+                # Get latest price record
+                response = price_data().select("*").order("fetched_at", desc=True).limit(1).execute()
+                latest_price = response.data[0] if response.data else {}
+                
+                if latest_price:
+                    # Get 7-day old price for change calculation if not already present
+                    # Note: We are just fetching what's available
+                    pass
+                
+                state["price_data"] = latest_price
+            except Exception as e:
+                print(f"⚠️  Could not fetch price data: {str(e)}")
+                state["errors"].append(f"Price DB error: {str(e)}")
+                state["price_data"] = {}
             
-            state["price_data"] = price_data
+            # Get latest news data from DB
+            print("📰 Fetching silver news from DB...")
+            news_items = []
+            try:
+                # Fetch recent news
+                response = news_data().select("*").order("fetched_at", desc=True).limit(10).execute()
+                news_items = response.data if response.data else []
+            except Exception as e:
+                print(f"⚠️  Could not fetch news data: {str(e)}")
+                state["errors"].append(f"News DB error: {str(e)}")
+            
+            state["news_data"] = news_items
+            
             state["current_step"] = "collect_complete"
-            state["last_updated"] = datetime.utcnow().isoformat()
+            state["messages"].append({
+                "step": "collect",
+                "status": "complete",
+                "price_collected": bool(state["price_data"]),
+                "news_count": len(news_items),
+                "timestamp": datetime.utcnow().isoformat()
+            })
+            
+            print(f"✅ Collection complete: Price=${state['price_data'].get('price', 'N/A')}, News={len(news_items)} items")
             
         except Exception as e:
-            state["errors"].append(f"Collection error: {str(e)}")
+            error_msg = f"Collection error: {str(e)}"
+            state["errors"].append(error_msg)
+            print(f"❌ {error_msg}")
         
+        state["last_updated"] = datetime.utcnow().isoformat()
         return state
     
     async def _analyze_node(self, state: AgentGraphState) -> AgentGraphState:
         """
-        Analysis node: Process collected data.
+        Analysis node: Process collected data using LLM.
         """
-        # Placeholder for LLM analysis
-        state["current_step"] = "analyze_complete"
-        state["price_analysis"] = "Analysis pending LLM integration"
+        from brain.prompts import SYSTEM_PROMPTS
+        from brain.llm_client import get_llm_client 
+        
+        state["messages"].append({
+            "step": "analyze",
+            "status": "started",
+            "timestamp": datetime.utcnow().isoformat()
+        })
+        
+        try:
+            print("🤔 Analyzing market data...")
+            
+            # Initialize LLM client if not provided
+            if not self.llm_client:
+                self.llm_client = get_llm_client()
+            
+            # Get price history from database if available
+            price_history = []
+            if self.db_client:
+                try:
+                    price_history = self.db_client.get_price_history(symbol="XAG", days=7)
+                except Exception:
+                    pass
+            
+            # Analyze price data
+            price_analysis = self.llm_client.analyze_market_data(
+                state["price_data"],
+                price_history=price_history,
+                system_prompt=SYSTEM_PROMPTS["analyst"]
+            )
+            state["price_analysis"] = price_analysis
+            
+            # Analyze news sentiment
+            news_sentiment = self.llm_client.analyze_news_sentiment(
+                state["news_data"],
+                system_prompt=SYSTEM_PROMPTS["analyst"]
+            )
+            state["news_sentiment"] = news_sentiment
+            
+            state["current_step"] = "analyze_complete"
+            state["messages"].append({
+                "step": "analyze",
+                "status": "complete",
+                "sentiment": news_sentiment.get("overall_sentiment"),
+                "timestamp": datetime.utcnow().isoformat()
+            })
+            
+            print(f"✅ Analysis complete: Sentiment={news_sentiment.get('overall_sentiment', 'N/A')}")
+            
+        except Exception as e:
+            error_msg = f"Analysis error: {str(e)}"
+            state["errors"].append(error_msg)
+            state["price_analysis"] = f"Analysis failed: {str(e)}"
+            state["news_sentiment"] = {"overall_sentiment": "neutral", "error": str(e)}
+            print(f"❌ {error_msg}")
+        
+        state["last_updated"] = datetime.utcnow().isoformat()
         return state
     
     async def _predict_node(self, state: AgentGraphState) -> AgentGraphState:
         """
-        Prediction node: Generate price predictions.
+        Prediction node: Generate price predictions using LLM.
         """
-        # Placeholder for LLM prediction
-        state["current_step"] = "predict_complete"
-        state["prediction"] = {
-            "direction": "pending",
-            "target": None,
-            "horizon": "24h",
-            "reasoning": "Prediction pending LLM integration"
-        }
-        state["confidence"] = 0.0
+        from brain.prompts import SYSTEM_PROMPTS
+        from brain.llm_client import get_llm_client
+        
+        state["messages"].append({
+            "step": "predict",
+            "status": "started",
+            "timestamp": datetime.utcnow().isoformat()
+        })
+        
+        try:
+            print("🔮 Generating prediction...")
+            
+            # Initialize LLM client if not provided
+            if not self.llm_client:
+                self.llm_client = get_llm_client()
+            
+            # Generate prediction
+            prediction = self.llm_client.make_prediction(
+                market_data=state["price_data"],
+                news_analysis=state["news_sentiment"],
+                price_analysis=state["price_analysis"],
+                system_prompt=SYSTEM_PROMPTS["predictor"]
+            )
+            
+            state["prediction"] = prediction
+            state["confidence"] = prediction.get("confidence_score", 0.0)
+            
+            state["current_step"] = "predict_complete"
+            state["messages"].append({
+                "step": "predict",
+                "status": "complete",
+                "direction": prediction.get("direction"),
+                "confidence": state["confidence"],
+                "timestamp": datetime.utcnow().isoformat()
+            })
+            
+            print(f"✅ Prediction: {prediction.get('decision', 'N/A').upper()} "
+                  f"(confidence: {state['confidence']:.2f})")
+            
+        except Exception as e:
+            error_msg = f"Prediction error: {str(e)}"
+            state["errors"].append(error_msg)
+            state["prediction"] = {
+                "decision": "neutral",
+                "direction": "neutral",
+                "error": str(e),
+                "reasoning_chain": "Prediction failed due to error"
+            }
+            state["confidence"] = 0.0
+            print(f"❌ {error_msg}")
+        
+        state["last_updated"] = datetime.utcnow().isoformat()
         return state
     
     async def _log_node(self, state: AgentGraphState) -> AgentGraphState:
         """
         Logging node: Persist results to database.
         """
-        if self.db_client and state.get("prediction"):
-            self.db_client.log_agent_action({
-                "session_id": state["session_id"],
-                "log_type": "prediction",
-                "prediction_value": state["prediction"],
-                "confidence_score": state["confidence"],
-                "reasoning_chain": state.get("price_analysis", "")
-            })
+        state["messages"].append({
+            "step": "log",
+            "status": "started",
+            "timestamp": datetime.utcnow().isoformat()
+        })
         
-        state["current_step"] = "complete"
+        try:
+            print("💾 Logging results...")
+            
+            if self.db_client and state.get("prediction"):
+                self.db_client.log_agent_action({
+                    "session_id": state["session_id"],
+                    "reasoning_chain": state["prediction"].get("reasoning_chain", "") + "\n\nAnalysis: " + str(state.get("price_analysis", "")),
+                    "decision": state["prediction"].get("decision"),
+                    "prediction_value": state["prediction"],
+                    "confidence_score": state["confidence"],
+                    "raw_response": {
+                        "news_sentiment": state.get("news_sentiment", {}),
+                        "price_data": state.get("price_data", {})
+                    },
+                    "created_at": datetime.utcnow().isoformat()
+                })
+                
+                print("✅ Results logged to database")
+            else:
+                print("⚠️  Database not available, results not persisted")
+            
+            state["current_step"] = "complete"
+            state["messages"].append({
+                "step": "log",
+                "status": "complete",
+                "timestamp": datetime.utcnow().isoformat()
+            })
+            
+        except Exception as e:
+            error_msg = f"Logging error: {str(e)}"
+            state["errors"].append(error_msg)
+            print(f"❌ {error_msg}")
+        
+        state["last_updated"] = datetime.utcnow().isoformat()
         return state
     
     def get_initial_state(self, session_id: str = None) -> AgentGraphState:
@@ -171,12 +352,32 @@ class SilverAgentGraph:
         Returns:
             Final agent state after execution
         """
+        print("🚀 Starting Silver Prediction Agent...")
+        print(f"Session ID: {session_id or 'auto-generated'}")
+        print("-" * 60)
+        
         state = self.get_initial_state(session_id)
         
-        # Execute nodes sequentially (simplified without full langgraph)
+        # Build graph if not already built
+        if not self._graph:
+            try:
+                self._build_graph()
+                print("✅ LangGraph state machine initialized")
+                
+                # Execute using LangGraph
+                result = await self._graph.ainvoke(state)
+                return result
+            except ImportError:
+                print("⚠️  LangGraph not available, using sequential execution")
+        
+        # Fallback: Execute nodes sequentially without LangGraph
         state = await self._collect_node(state)
         state = await self._analyze_node(state)
         state = await self._predict_node(state)
         state = await self._log_node(state)
         
+        print("-" * 60)
+        print("✅ Agent execution complete!")
+        
         return state
+

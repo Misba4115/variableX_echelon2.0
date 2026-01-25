@@ -7,6 +7,8 @@ Executes stock data fetching based on controller's adaptive decisions.
 import os
 import requests
 import datetime
+from datetime import timezone
+from zoneinfo import ZoneInfo
 from typing import Dict, Any
 from .db_helper import ScraperDBHelper
 
@@ -202,9 +204,10 @@ class StockAgent:
             
             ts_raw = raw.get("t", 0)
             if ts_raw:
-                ts = datetime.datetime.fromtimestamp(ts_raw).isoformat()
+                # Convert Unix timestamp to IST
+                ts = datetime.datetime.fromtimestamp(ts_raw, tz=ZoneInfo("Asia/Kolkata")).isoformat()
             else:
-                ts = datetime.datetime.utcnow().isoformat()
+                ts = datetime.datetime.now(ZoneInfo("Asia/Kolkata")).isoformat()
 
             vol = 0  # Finnhub quote doesn't provide volume
             

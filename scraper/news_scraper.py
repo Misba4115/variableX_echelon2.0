@@ -135,26 +135,33 @@ ARTICLE CONTENT: {content[:4000]}
         target = self.db_helper.get_next_news_target()
         if not target:
             print("[NewsAgent] No targets found.")
-            return {"success": False}
+            return {"success": False, "articles": 0}
 
         source_name = target["name"]
         source_url = target.get("url")
+        target_id = target.get("id")
         print(f"[NewsAgent] Controller assigned: {source_name} ({source_url})")
 
         if not source_url:
             print(f"[NewsAgent] Error: No URL found for target {source_name}")
-            return {"success": False, "error": "Missing URL"}
+            return {"success": False, "error": "Missing URL", "articles": 0}
 
-        articles, noise_data = await self.scrape_source(source_name, source_url)
+        try:
+            articles, noise_data = await self.scrape_source(source_name, source_url)
 
-        if articles:
-            self.db_helper.insert_news_data(articles)
-            print(f"[NewsAgent] Stored {len(articles)} articles.")
+            if articles:
+                inserted = self.db_helper.insert_news_data(articles, target_id=target_id)
+                print(f"[NewsAgent] Stored {len(articles)} articles. DB insert: {inserted}")
 
-        self.db_helper.insert_noise_metrics("news", source_name, noise_data)
-        self.db_helper.mark_target_completed(target["id"])
+            self.db_helper.insert_noise_metrics("news", source_name, noise_data)
+            self.db_helper.mark_target_completed(target_id)
 
-        return {"success": len(articles) > 0, "articles": len(articles)}
+            return {"success": len(articles) > 0, "articles": len(articles)}
+        except Exception as e:
+            print(f"[NewsAgent] Controller execution error: {type(e).__name__}: {e}")
+            import traceback
+            traceback.print_exc()
+            return {"success": False, "error": str(e), "articles": 0}
 
     # -------------------------------------------------------------------
     # 5. SCRAPING LOGIC
@@ -162,168 +169,162 @@ ARTICLE CONTENT: {content[:4000]}
     async def scrape_source(self, source_name: str, base_url: str) -> tuple[List[Dict], Dict]:
         """
         Scrape news from a specific source URL.
+        Simplified version - just gets first/latest articles.
         
         Returns:
             (articles_list, noise_metrics_dict)
         """
         articles = []
         noise_count = 0
+        blocks = []
+        
+        print(f"[NewsAgent] Scraping {source_name}: {base_url}")
 
         async with async_playwright() as p:
-            # Launch with stealth settings
-            browser = await p.chromium.launch(
-                headless=True,
-                args=[
-                    '--disable-blink-features=AutomationControlled',
-                    '--disable-dev-shm-usage',
-                    '--no-sandbox',
-                    '--disable-setuid-sandbox',
-                    '--disable-web-security',
-                    '--disable-features=IsolateOrigins,site-per-process',
-                ]
-            )
-            
-            # Create context with realistic fingerprint
-            context = await browser.new_context(
-                viewport={"width": 1920, "height": 1080},
-                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                locale="en-US",
-                timezone_id="America/New_York",
-                permissions=["geolocation"],
-                geolocation={"latitude": 40.7128, "longitude": -74.0060},  # New York
-                color_scheme="light",
-                extra_http_headers={
-                    "Accept-Language": "en-US,en;q=0.9",
-                    "Accept-Encoding": "gzip, deflate, br",
-                    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-                    "DNT": "1",
-                    "Connection": "keep-alive",
-                    "Upgrade-Insecure-Requests": "1"
-                }
-            )
-            
-            page = await context.new_page()
-            
-            # Inject anti-detection scripts
-            await page.add_init_script("""
-                // Override the navigator.webdriver property
-                Object.defineProperty(navigator, 'webdriver', {
-                    get: () => undefined
-                });
-                
-                // Mock plugins
-                Object.defineProperty(navigator, 'plugins', {
-                    get: () => [1, 2, 3, 4, 5]
-                });
-                
-                // Mock languages
-                Object.defineProperty(navigator, 'languages', {
-                    get: () => ['en-US', 'en']
-                });
-                
-                // Chrome runtime
-                window.chrome = {
-                    runtime: {}
-                };
-                
-                // Permissions
-                const originalQuery = window.navigator.permissions.query;
-                window.navigator.permissions.query = (parameters) => (
-                    parameters.name === 'notifications' ?
-                        Promise.resolve({ state: Notification.permission }) :
-                        originalQuery(parameters)
-                );
-            """)
-
-            # base_url is now passed as an argument
-            # base_url = self.sources[source_name]["url"]
-            print(f"[NewsAgent] Navigating to {base_url}")
-            
             try:
-                await page.goto(base_url, wait_until="domcontentloaded", timeout=30000)
-                await self.human_like_behavior(page)
-                await asyncio.sleep(2)  # Let page fully load
-
-                # Try multiple selectors for different sites
-                selectors = [
-                    "article",
-                ".article",
-                ".Card",
-                ".articleItem", # Investing.com
-                "[data-testid='MediaStoryCard']", # Reuters
-                ".news-item", # Kitco
-                ".kitco-news-item",
-                "li.stream-item",
-                ".article-item",
-                "[class*='article']",
-                "[class*='story']",
-                "[class*='news']",
-                ".post",
-                "[role='article']"
-                ]
+                # Launch with minimal settings for speed
+                browser = await p.chromium.launch(headless=True)
                 
-                blocks = []
-                for selector in selectors:
-                    blocks = await page.query_selector_all(selector)
-                    if blocks:
-                        print(f"[NewsAgent] Found {len(blocks)} items with selector: {selector}")
-                        break
+                page = await browser.new_page()
                 
-                if not blocks:
-                    print("[NewsAgent] No article blocks found with any selector")
-                    await browser.close()
-                    return [], {"noise_ratio": 1.0, "total_blocks": 0}
-
-                # Process first 5 blocks
-                for idx, block in enumerate(blocks[:5]):
-                    try:
-                        text = await block.inner_text()
+                # Set timeout to 15 seconds instead of 30 - fail fast
+                page.set_default_timeout(15000)
+                page.set_default_navigation_timeout(15000)
+                
+                print(f"[NewsAgent] Navigating to {base_url}...")
+                
+                # Try to load the page - if it fails, we skip this source
+                try:
+                    await page.goto(base_url, wait_until="load", timeout=15000)
+                except Exception as e:
+                    print(f"[NewsAgent] ⚠️  Navigation timeout/failed for {source_name}: {e}")
+                    print(f"[NewsAgent] Will try to scrape whatever loaded...")
+                
+                # Short wait for any dynamic content
+                await asyncio.sleep(1)
+                
+                # Simple approach: Get all visible text content grouped by headers/paragraphs
+                # This is more reliable than trying specific selectors
+                
+                print(f"[NewsAgent] Extracting content from page...")
+                
+                # Get all headers and their following content
+                try:
+                    # Method 1: Try to get article elements first
+                    all_articles = await page.query_selector_all("article, [role='article'], .article, .news-item, .post")
+                    
+                    if all_articles:
+                        print(f"[NewsAgent] Found {len(all_articles)} article elements")
+                        blocks = all_articles[:5]  # Take first 5
+                    else:
+                        # Method 2: Fallback to headers which usually have article titles
+                        headers = await page.query_selector_all("h1, h2, h3, h4, h5")
                         
-                        # Look for links
-                        link_elem = await block.query_selector("a")
-                        href = await link_elem.get_attribute("href") if link_elem else None
-                        
-                        # Construct full URL
-                        if href:
-                            if href.startswith("http"):
-                                full_url = href
-                            elif href.startswith("/"):
-                                from urllib.parse import urlparse
-                                parsed = urlparse(base_url)
-                                full_url = f"{parsed.scheme}://{parsed.netloc}{href}"
+                        if headers:
+                            print(f"[NewsAgent] Found {len(headers)} headers, using as article titles")
+                            blocks = headers[:5]  # Take first 5 headers
+                        else:
+                            # Method 3: Last resort - get all divs that contain text
+                            divs = await page.query_selector_all("div[class*='item'], div[class*='article'], div[class*='post'], li")
+                            if divs:
+                                print(f"[NewsAgent] Found {len(divs)} potential article divs")
+                                blocks = divs[:5]
+                            else:
+                                print("[NewsAgent] ❌ No content found on page")
+                                await browser.close()
+                                return [], {"noise_ratio": 1.0, "total_blocks": 0, "articles_extracted": 0, "noise_items": 0}
+                    
+                    print(f"[NewsAgent] Processing {len(blocks)} content blocks...")
+                    
+                    # Process each block
+                    for idx, block in enumerate(blocks):
+                        try:
+                            # Get text and any links
+                            text = await block.inner_text()
+                            text = text.strip()
+                            
+                            if not text or len(text) < 10:
+                                noise_count += 1
+                                continue
+                            
+                            # Try to find a link in this block
+                            link_elem = await block.query_selector("a")
+                            href = None
+                            if link_elem:
+                                href = await link_elem.get_attribute("href")
+                            
+                            # Construct full URL
+                            if href:
+                                if href.startswith("http"):
+                                    full_url = href
+                                elif href.startswith("/"):
+                                    from urllib.parse import urlparse
+                                    parsed = urlparse(base_url)
+                                    full_url = f"{parsed.scheme}://{parsed.netloc}{href}"
+                                else:
+                                    full_url = base_url
                             else:
                                 full_url = base_url
-                        else:
-                            full_url = base_url
-
-                        # Check if silver-related
-                        text_lower = text.lower()
-                        if "silver" in text_lower or "xag" in text_lower or "precious metal" in text_lower:
-                            print(f"[NewsAgent] Processing article {idx + 1}: {text[:100]}...")
                             
-                            # Extract title (first line usually)
+                            # Extract title and content
                             lines = [line.strip() for line in text.split('\n') if line.strip()]
-                            title = lines[0] if lines else "Silver Market Update"
-                            content = ' '.join(lines[1:5]) if len(lines) > 1 else text[:500]
                             
-                            # Generate structured article
-                            data = await self.generate_structured_article(title, content, full_url)
-                            if data:
-                                articles.append(data)
-                                print(f"[NewsAgent] ✅ Article extracted: {data['title'][:80]}")
-                            else:
+                            if not lines:
                                 noise_count += 1
-                        else:
-                            noise_count += 1
+                                continue
                             
-                    except Exception as e:
-                        print(f"[NewsAgent] Error processing block {idx}: {e}")
-                        noise_count += 1
-
-            except Exception as e:
-                print(f"[NewsAgent] Error during scraping: {e}")
-            finally:
+                            title = lines[0][:100]
+                            content = ' '.join(lines[1:3]) if len(lines) > 1 else lines[0][:200]
+                            
+                            print(f"[NewsAgent] Article {idx + 1}: {title[:60]}...")
+                            
+                            # Try to generate structured article using LLM
+                            try:
+                                data = await self.generate_structured_article(title, content, full_url)
+                                if data:
+                                    articles.append(data)
+                                    print(f"[NewsAgent] ✅ Extracted: {data['title'][:60]}...")
+                                else:
+                                    noise_count += 1
+                            except Exception as e:
+                                # If LLM fails, create basic article manually
+                                print(f"[NewsAgent] LLM extraction failed ({e}), using manual extraction...")
+                                manual_article = {
+                                    "title": title,
+                                    "content": content[:200],
+                                    "fetched_at": datetime.utcnow().isoformat(),
+                                    "source_url": full_url,
+                                    "raw_data": {
+                                        "body_content": text[:1000],
+                                        "alt_text": "",
+                                        "tags": ["silver", "market", "news"]
+                                    }
+                                }
+                                articles.append(manual_article)
+                                print(f"[NewsAgent] ✅ Manual extraction: {title[:60]}...")
+                                
+                        except Exception as e:
+                            print(f"[NewsAgent] Error processing block {idx}: {type(e).__name__}: {e}")
+                            noise_count += 1
+                            continue
+                    
+                    print(f"[NewsAgent] Extracted {len(articles)} articles successfully")
+                    
+                except Exception as e:
+                    print(f"[NewsAgent] Error during content extraction: {type(e).__name__}: {e}")
+                    import traceback
+                    traceback.print_exc()
+                
                 await browser.close()
+                
+            except Exception as e:
+                print(f"[NewsAgent] Unexpected error: {type(e).__name__}: {e}")
+                import traceback
+                traceback.print_exc()
+                try:
+                    await browser.close()
+                except:
+                    pass
 
         total_blocks = len(blocks) if blocks else 1
         noise_metrics = {

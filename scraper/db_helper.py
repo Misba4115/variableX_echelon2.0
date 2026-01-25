@@ -56,16 +56,39 @@ class ScraperDBHelper:
     # --- DATA INSERTION ---
 
     @staticmethod
-    def insert_news_data(articles: List[Dict]) -> bool:
+    def insert_news_data(articles: List[Dict], target_id: Optional[str] = None) -> bool:
         """Insert structured news articles into news_data table."""
         try:
             if not articles:
+                print("[DB_Helper] WARNING: No articles to insert")
                 return False
-            # Uses the news_data() helper from your client
-            news_data().insert(articles).execute()
+            
+            # Add target_id to all items if provided
+            if target_id:
+                for item in articles:
+                    item["target_id"] = target_id
+            
+            print(f"[DB_Helper] Inserting {len(articles)} news articles")
+            # Filter to only fields that exist in the schema
+            filtered_articles = []
+            for article in articles:
+                filtered = {
+                    "title": article.get("title", "Unknown Title"),
+                    "content": article.get("content", ""),
+                    "source_url": article.get("source_url", ""),
+                    "raw_data": article.get("raw_data", {})
+                }
+                if target_id:
+                    filtered["target_id"] = target_id
+                filtered_articles.append(filtered)
+            
+            response = news_data().insert(filtered_articles).execute()
+            print(f"[DB_Helper] News insert response: {response}")
             return True
         except Exception as e:
-            print(f"[DB_Helper] Error inserting news: {e}")
+            print(f"[DB_Helper] ERROR inserting news: {type(e).__name__}: {e}")
+            import traceback
+            traceback.print_exc()
             return False
 
     @staticmethod
@@ -73,18 +96,23 @@ class ScraperDBHelper:
         """Insert real-time price data into price_data table."""
         try:
             if not data_list:
+                print("[DB_Helper] WARNING: No stock data to insert")
                 return False
             
             # Add target_id to all items
             if target_id:
                 for item in data_list:
                     item["target_id"] = target_id
-                    
+            
+            print(f"[DB_Helper] Inserting {len(data_list)} stock records: {data_list}")
             # Uses the price_data() helper from your client
-            price_data().insert(data_list).execute()
+            response = price_data().insert(data_list).execute()
+            print(f"[DB_Helper] Stock insert response: {response}")
             return True
         except Exception as e:
-            print(f"[DB_Helper] Error inserting stock data: {e}")
+            print(f"[DB_Helper] ERROR inserting stock data: {type(e).__name__}: {e}")
+            import traceback
+            traceback.print_exc()
             return False
 
     # --- LOGGING & METRICS ---
@@ -93,16 +121,19 @@ class ScraperDBHelper:
     def insert_noise_metrics(category: str, source: str, metrics: Dict):
         """Log performance and noise metrics for the controller."""
         try:
+            import uuid
             log_entry = {
-                "category": category,
-                "source": source,
-                "metrics": metrics,
-                "timestamp": datetime.utcnow().isoformat(),
-                "level": "INFO"
+                "session_id": str(uuid.uuid4()),
+                "reasoning_chain": f"Noise metrics for {category} - {source}",
+                "decision": f"Logged metrics: {metrics}",
+                "prediction_value": metrics,
+                "confidence_score": 0.8,
+                "raw_response": {"category": category, "source": source}
             }
-            agent_logs().insert(log_entry).execute()
+            response = agent_logs().insert(log_entry).execute()
+            print(f"[DB_Helper] Noise metrics logged: {response}")
         except Exception as e:
-            print(f"[DB_Helper] Error logging metrics: {e}")
+            print(f"[DB_Helper] Error logging metrics: {type(e).__name__}: {e}")
 
     # --- FORMATTING HELPER ---
 

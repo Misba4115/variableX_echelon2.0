@@ -8,7 +8,7 @@ from datetime import datetime
 # Import the helper functions from your Supabase client file
 # Ensure the filename below matches your actual client filename (e.g., supabase_client.py)
 # Import from the database package
-from database.supabase_client import targets, market_data, agent_logs
+from database.supabase_client import targets, price_data, news_data, agent_logs
 
 class ScraperDBHelper:
     
@@ -18,10 +18,12 @@ class ScraperDBHelper:
     def get_next_news_target() -> Optional[Dict]:
         """Fetch the next active news scraping target."""
         try:
+            print("[DB_Helper] Fetching next news target...")
             response = targets().select("*")\
-                .eq("type", "news")\
-                .eq("status", "active")\
+                .eq("category", "news")\
+                .eq("is_active", True)\
                 .limit(1).execute()
+            print(f"[DB_Helper] Found news target: {response.data[0]['name'] if response.data else 'None'}")
             return response.data[0] if response.data else None
         except Exception as e:
             print(f"[DB_Helper] Error fetching news target: {e}")
@@ -31,10 +33,12 @@ class ScraperDBHelper:
     def get_next_stock_target() -> Optional[Dict]:
         """Fetch the next active stock/API target."""
         try:
+            print("[DB_Helper] Fetching next stock target...")
             response = targets().select("*")\
-                .eq("type", "stock")\
-                .eq("status", "active")\
+                .eq("category", "price")\
+                .eq("is_active", True)\
                 .limit(1).execute()
+            print(f"[DB_Helper] Found stock target: {response.data[0]['name'] if response.data else 'None'}")
             return response.data[0] if response.data else None
         except Exception as e:
             print(f"[DB_Helper] Error fetching stock target: {e}")
@@ -44,7 +48,7 @@ class ScraperDBHelper:
     def mark_target_completed(target_id: str):
         """Update a target status to completed."""
         try:
-            targets().update({"status": "completed", "last_run": "now()"})\
+            targets().update({"last_scraped_at": datetime.utcnow().isoformat()})\
                 .eq("id", target_id).execute()
         except Exception as e:
             print(f"[DB_Helper] Error marking target completed: {e}")
@@ -57,21 +61,27 @@ class ScraperDBHelper:
         try:
             if not articles:
                 return False
-            # Uses the market_data() helper from your client
-            market_data().insert(articles).execute()
+            # Uses the news_data() helper from your client
+            news_data().insert(articles).execute()
             return True
         except Exception as e:
             print(f"[DB_Helper] Error inserting news: {e}")
             return False
 
     @staticmethod
-    def insert_stock_data(data_list: List[Dict]) -> bool:
+    def insert_stock_data(data_list: List[Dict], target_id: Optional[str] = None) -> bool:
         """Insert real-time price data into price_data table."""
         try:
             if not data_list:
                 return False
-            # Uses the market_data() helper from your client
-            market_data().insert(data_list).execute()
+            
+            # Add target_id to all items
+            if target_id:
+                for item in data_list:
+                    item["target_id"] = target_id
+                    
+            # Uses the price_data() helper from your client
+            price_data().insert(data_list).execute()
             return True
         except Exception as e:
             print(f"[DB_Helper] Error inserting stock data: {e}")
@@ -104,7 +114,6 @@ class ScraperDBHelper:
         price, currency, price_change, price_change_percent, high_24h, low_24h, volume, fetched_at, source_timestamp
         """
         return {
-            "symbol": "SLV", # Kept for DB integrity, though strictly asking for the list below
             "price": price,
             "currency": currency,
             "price_change": change,

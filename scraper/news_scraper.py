@@ -137,10 +137,15 @@ ARTICLE CONTENT: {content[:4000]}
             print("[NewsAgent] No targets found.")
             return {"success": False}
 
-        source_name = target["source_name"]
-        print(f"[NewsAgent] Controller assigned: {source_name}")
+        source_name = target["name"]
+        source_url = target.get("url")
+        print(f"[NewsAgent] Controller assigned: {source_name} ({source_url})")
 
-        articles, noise_data = await self.scrape_source(source_name)
+        if not source_url:
+            print(f"[NewsAgent] Error: No URL found for target {source_name}")
+            return {"success": False, "error": "Missing URL"}
+
+        articles, noise_data = await self.scrape_source(source_name, source_url)
 
         if articles:
             self.db_helper.insert_news_data(articles)
@@ -154,9 +159,9 @@ ARTICLE CONTENT: {content[:4000]}
     # -------------------------------------------------------------------
     # 5. SCRAPING LOGIC
     # -------------------------------------------------------------------
-    async def scrape_source(self, source_name: str) -> tuple[List[Dict], Dict]:
+    async def scrape_source(self, source_name: str, base_url: str) -> tuple[List[Dict], Dict]:
         """
-        Scrape news from a specific source.
+        Scrape news from a specific source URL.
         
         Returns:
             (articles_list, noise_metrics_dict)
@@ -167,7 +172,7 @@ ARTICLE CONTENT: {content[:4000]}
         async with async_playwright() as p:
             # Launch with stealth settings
             browser = await p.chromium.launch(
-                headless=False,
+                headless=True,
                 args=[
                     '--disable-blink-features=AutomationControlled',
                     '--disable-dev-shm-usage',
@@ -230,7 +235,8 @@ ARTICLE CONTENT: {content[:4000]}
                 );
             """)
 
-            base_url = self.sources[source_name]["url"]
+            # base_url is now passed as an argument
+            # base_url = self.sources[source_name]["url"]
             print(f"[NewsAgent] Navigating to {base_url}")
             
             try:
@@ -241,13 +247,19 @@ ARTICLE CONTENT: {content[:4000]}
                 # Try multiple selectors for different sites
                 selectors = [
                     "article",
-                    ".article",
-                    ".Card",
-                    "li.stream-item",
-                    ".article-item",
-                    "[class*='article']",
-                    "[class*='story']",
-                    "[class*='news']"
+                ".article",
+                ".Card",
+                ".articleItem", # Investing.com
+                "[data-testid='MediaStoryCard']", # Reuters
+                ".news-item", # Kitco
+                ".kitco-news-item",
+                "li.stream-item",
+                ".article-item",
+                "[class*='article']",
+                "[class*='story']",
+                "[class*='news']",
+                ".post",
+                "[role='article']"
                 ]
                 
                 blocks = []

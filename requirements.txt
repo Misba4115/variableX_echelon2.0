@@ -8,6 +8,12 @@ playwright>=1.57.0
 playwright-stealth>=1.0.6
 greenlet>=3.1.0
 
+# FastAPI
+fastapi>=0.100.0
+uvicorn[standard]>=0.23.0
+pydantic>=2.0.0
+python-multipart>=0.0.6
+
 # Dashboard
 streamlit>=1.30.0
 plotly>=5.0.0

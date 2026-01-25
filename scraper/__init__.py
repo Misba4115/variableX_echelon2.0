@@ -7,13 +7,19 @@ Controller-driven architecture with adaptive source prioritization.
 """
 
 from .sources import StockAgent
-from .news_scraper import NewsAgent
+try:
+    from .news_scraper import NewsAgent
+    news_agent_available = True
+except ImportError:
+    NewsAgent = None
+    news_agent_available = False
 from .db_helper import ScraperDBHelper
 
 __all__ = [
     'StockAgent',
     'NewsAgent',
-    'ScraperDBHelper'
+    'ScraperDBHelper',
+    'news_agent_available'
 ]
 
 __version__ = '1.0.0'

@@ -50,7 +50,7 @@ class StockAgent:
                 "noise_score": 1.0
             }
         
-        source_name = target['source_name']
+        source_name = target['name']
         print(f"[StockAgent] Controller assigned target: {source_name}")
         
         # 2. Execute the scraping
@@ -59,7 +59,7 @@ class StockAgent:
         # 3. Store data if valid
         data_stored = False
         if result["data"]:
-            data_stored = self.db_helper.insert_stock_data([result["data"]])
+            data_stored = self.db_helper.insert_stock_data([result["data"]], target_id=target['id'])
             print(f"[StockAgent] Data stored: {data_stored}")
         
         # 4. Report noise metrics back to DB (for controller's next decision)
@@ -86,16 +86,17 @@ class StockAgent:
         Execute stock data fetching for a specific source.
         
         Args:
-            instruction: Source to fetch from ("alpha_vantage" or "finnhub")
+            instruction: Source to fetch from ("alpha_vantage" or "finnhub", or full target name)
         
         Returns: {
             "data": Dict (formatted for DB) | None,
             "noise_score": float (0.0=Clean, 1.0=Noisy/Empty)
         }
         """
-        if instruction == "alpha_vantage":
+        instr_lower = instruction.lower()
+        if "alpha" in instr_lower or "vantage" in instr_lower:
             return self._fetch_alpha_vantage()
-        elif instruction == "finnhub":
+        elif "finnhub" in instr_lower:
             return self._fetch_finnhub()
         else:
             print(f"[StockAgent] WARNING: Unknown instruction '{instruction}'")
@@ -179,6 +180,7 @@ class StockAgent:
                 return {"data": None, "noise_score": 1.0}
             
             raw = r.json()
+            print(f"[StockAgent] Finnhub raw response: {raw}")
             
             if "error" in raw:
                 print(f"[StockAgent] ERROR: Finnhub API: {raw['error']}")

@@ -20,12 +20,11 @@ Always provide clear, actionable insights with confidence levels.""",
 Given market data and analysis, your role is to make price predictions.
 
 For each prediction, provide:
-1. Direction (bullish/bearish/neutral)
+1. Decision (bullish/bearish/neutral)
 2. Price target or range
-3. Time horizon (short-term: 24h, medium-term: 7d, long-term: 30d)
-4. Confidence score (0.0 to 1.0)
-5. Key factors supporting your prediction
-6. Potential risks that could invalidate the prediction
+3. Confidence score (0.0 to 1.0)
+4. Key factors supporting your prediction
+5. Potential risks that could invalidate the prediction
 
 Be precise and quantitative in your predictions.""",
 
@@ -96,8 +95,7 @@ TECHNICAL INDICATORS:
 {technical_indicators}
 
 Provide your prediction with:
-- Direction and price target
-- Time horizon
+- Decision and price target
 - Confidence score (0-1)
 - Supporting reasoning
 - Key risks

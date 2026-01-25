@@ -4,6 +4,7 @@ Main entry point for the Autonomous Silver Prediction Agent.
 
 import asyncio
 from database import SupabaseClient, StateManager
+
 from brain import SilverAgentGraph
 
 

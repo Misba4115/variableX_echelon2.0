@@ -11,6 +11,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime
 from typing import Dict, List, Any, Optional
 from pydantic import BaseModel, Field
+import uuid
+import json
 
 # Load environment variables
 from dotenv import load_dotenv
@@ -24,6 +26,14 @@ from controller import (
     get_fresh_data,
     create_watchdog
 )
+
+# Import database and LLM modules
+from database.supabase_client import (
+    price_data as price_table,
+    news_data as news_table,
+    agent_logs as logs_table
+)
+from brain.llm_client import get_llm_client
 
 # ============================================================
 # PYDANTIC MODELS (for Swagger documentation)
@@ -68,6 +78,25 @@ class HealthResponse(BaseModel):
     status: str
     version: str
     database_connected: bool
+
+
+class PredictionRequest(BaseModel):
+    """Request for real-time prediction."""
+    include_history: bool = Field(True, description="Include price history in analysis")
+
+
+class PredictionResponse(BaseModel):
+    """Real-time prediction response."""
+    success: bool
+    decision: str = Field(..., description="BULLISH, BEARISH, or NEUTRAL")
+    target_price: float = Field(..., description="Predicted target price in USD")
+    confidence_score: float = Field(..., description="Confidence level (0.0-1.0)")
+    time_horizon: str = Field(..., description="Time frame for prediction")
+    key_factors: List[str] = Field(..., description="Key factors supporting prediction")
+    risks: List[str] = Field(..., description="Potential risks")
+    current_price: float = Field(..., description="Current silver price")
+    log_id: str = Field(..., description="Agent log ID in database")
+    timestamp: str = Field(..., description="Prediction timestamp")
 
 
 # ============================================================
@@ -265,6 +294,107 @@ async def get_fresh_data_endpoint():
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/predict", response_model=PredictionResponse, tags=["Prediction"])
+async def predict_silver_price(request: PredictionRequest = None):
+    """
+    Generate a real-time silver price prediction.
+    
+    This endpoint:
+    1. Fetches latest price data from price_data table
+    2. Fetches latest news from news_data table
+    3. Analyzes market data using Gemini LLM
+    4. Generates price prediction with 80/20 weighting
+    5. Saves prediction to agent_logs table
+    
+    Returns prediction with decision, target price, and confidence score.
+    """
+    try:
+        # Initialize LLM client
+        llm_client = get_llm_client(model="gemini-2.5-flash")
+        
+        # Fetch latest price data
+        price_response = price_table().select("*").order("fetched_at", desc=True).limit(1).execute()
+        if not price_response.data or len(price_response.data) == 0:
+            raise HTTPException(status_code=400, detail="No price data available in database")
+        
+        current_price_record = price_response.data[0]
+        current_price = float(current_price_record.get('price', 0))
+        
+        # Fetch price history if requested
+        price_history = []
+        if request and request.include_history:
+            history_response = price_table().select("*").order("fetched_at", desc=True).limit(10).execute()
+            price_history = history_response.data if history_response.data else []
+        
+        # Fetch latest news data
+        news_response = news_table().select("*").order("fetched_at", desc=True).limit(5).execute()
+        news_items = news_response.data if news_response.data else []
+        
+        # Analyze market data
+        market_analysis = llm_client.analyze_market_data(
+            price_data=current_price_record,
+            price_history=price_history
+        )
+        
+        # Analyze news sentiment
+        news_sentiment = llm_client.analyze_news_sentiment(news_items)
+        
+        # Generate prediction
+        prediction = llm_client.make_prediction(
+            market_data=current_price_record,
+            news_analysis=news_sentiment,
+            price_analysis=market_analysis
+        )
+        
+        # Check if prediction was successful
+        if "error" in prediction:
+            raise HTTPException(status_code=500, detail=prediction.get("error"))
+        
+        # Prepare log entry
+        session_id = str(uuid.uuid4())
+        log_entry = {
+            "session_id": session_id,
+            "reasoning_chain": prediction.get("reasoning_chain", ""),
+            "decision": prediction.get("decision", "NEUTRAL"),
+            "prediction_value": json.dumps({
+                "target_price": prediction.get("target_price"),
+                "price_range": prediction.get("price_range"),
+                "time_horizon": prediction.get("time_horizon"),
+                "key_factors": prediction.get("key_factors", []),
+                "risks": prediction.get("risks", []),
+                "probability_up": prediction.get("probability_up"),
+                "probability_down": prediction.get("probability_down")
+            }),
+            "confidence_score": prediction.get("confidence_score", 0.0),
+            "raw_response": json.dumps(prediction)
+        }
+        
+        # Save to agent_logs table
+        log_response = logs_table().insert(log_entry).execute()
+        log_id = log_response.data[0].get("id") if log_response.data else session_id
+        
+        # Return prediction
+        return {
+            "success": True,
+            "decision": prediction.get("decision", "NEUTRAL"),
+            "target_price": prediction.get("target_price", current_price),
+            "confidence_score": prediction.get("confidence_score", 0.0),
+            "time_horizon": prediction.get("time_horizon", "24 hours"),
+            "key_factors": prediction.get("key_factors", []),
+            "risks": prediction.get("risks", []),
+            "current_price": current_price,
+            "log_id": str(log_id),
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Prediction failed: {str(e)}")
 
 
 @app.post("/api/watchdog/start", tags=["Watchdog"])

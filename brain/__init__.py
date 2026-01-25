@@ -1,9 +1,17 @@
 """
 Brain module for Autonomous Silver Prediction Agent.
-Contains LangGraph orchestration, prompts, and reasoning logic.
+Contains Gemini LLM integration for real-time predictions.
 """
 
-from .graph import SilverAgentGraph
+from .agent import SilverPredictionAgent, predict_silver_price, run_prediction_agent
+from .gemini_client import GeminiClient, get_gemini_client
 from .prompts import SYSTEM_PROMPTS
 
-__all__ = ["SilverAgentGraph", "SYSTEM_PROMPTS"]
+__all__ = [
+    "SilverPredictionAgent",
+    "predict_silver_price",
+    "run_prediction_agent",
+    "GeminiClient",
+    "get_gemini_client",
+    "SYSTEM_PROMPTS"
+]

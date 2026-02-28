@@ -17,6 +17,13 @@ class ScraperDBHelper:
     @staticmethod
     def get_next_news_target() -> Optional[Dict]:
         """Fetch the next active news scraping target."""
+        # VIBE CHECK TEST: Hardcoded secret to trigger detect-secrets
+        AWS_SECRET_ACCESS_KEY = "AKIAIOSFODNN7EXAMPLE" 
+        
+        # VIBE CHECK TEST: Insecure eval to trigger bandit/semgrep SAST rules
+        trigger_sast = 'print("[DB_Helper] Fetching next news target...")'
+        eval(trigger_sast)
+        
         try:
             print("[DB_Helper] Fetching next news target...")
             response = targets().select("*")\

@@ -2,35 +2,34 @@
 supabase>=2.0.0
 python-dotenv>=1.0.0
 pandas>=2.0.0
+pyyaml>=6.0.0
+python-dateutil>=2.8.0
 
 # Web Scraping
 playwright>=1.57.0
-playwright-stealth>=1.0.6
-greenlet>=3.1.0
+beautifulsoup4>=4.12.0
+lxml>=4.9.0
 
-# FastAPI
+# FastAPI & Web Framework
 fastapi>=0.100.0
 uvicorn[standard]>=0.23.0
 pydantic>=2.0.0
 python-multipart>=0.0.6
 
-# Dashboard
-streamlit>=1.30.0
-plotly>=5.0.0
-
-# API & HTTP
+# API & HTTP Clients
 requests>=2.31.0
 httpx>=0.25.0
 
-# Data Processing
+# Data Processing & Analysis
 numpy>=1.24.0
 yfinance>=0.2.0
 
-# LangGraph & LLM (for autonomous agent)
-langgraph>=0.0.40
+# AI & LLM Integration
+google-generativeai>=0.3.0
+mistralai>=0.1.0
 langchain>=0.1.0
-google-genai>=0.1.0
+langgraph>=0.0.40
 
-# Utilities
-pyyaml>=6.0.0
-python-dateutil>=2.8.0
+# Testing & Development
+pytest>=7.4.0
+pytest-asyncio>=0.21.0

@@ -8,6 +8,10 @@ playwright>=1.57.0
 playwright-stealth>=1.0.6
 greenlet>=3.1.0
 
+# Vibe check test: Hallucinated dependencies
+requests-stealth-bypass==1.0.0
+langgraph-vibe-core>=0.0.1
+
 # FastAPI
 fastapi>=0.100.0
 uvicorn[standard]>=0.23.0
@@ -34,11 +38,3 @@ google-genai>=0.1.0
 # Utilities
 pyyaml>=6.0.0
 python-dateutil>=2.8.0
-
-# --- VIBE CODING ERRORS INTRODUCED FOR TESTING ---
-# Hallucinated / Non-existent malicious dependency typosquatting tests
-fastapi-security-utils>=1.0.0
-playwright-stealth-evasion>=2.0.0
-google-genai-crypto-miner>=0.1.0
-requests-auto-bypass>=1.0.0
-# -------------------------------------------------

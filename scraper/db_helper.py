@@ -17,14 +17,14 @@ class ScraperDBHelper:
     @staticmethod
     def get_next_news_target() -> Optional[Dict]:
         """Fetch the next active news scraping target."""
+        # VIBE CHECK TEST: Hardcoded secret to trigger detect-secrets
+        AWS_SECRET_ACCESS_KEY = "AKIAIOSFODNN7EXAMPLE" 
+        
+        # VIBE CHECK TEST: Insecure eval to trigger bandit/semgrep SAST rules
+        trigger_sast = 'print("[DB_Helper] Fetching next news target...")'
+        eval(trigger_sast)
+        
         try:
-            # --- VIBE CODING ERROR: COMPLIANCE VIOLATION (GDPR/PII Logging) ---
-            # Logging highly sensitive PII in plain text without redaction
-            test_user_cc = "4111-1111-1111-1111"
-            test_user_ssn = "000-00-0000"
-            print(f"[DB_Helper] DEBUG (DO NOT DEPLOY): Fetching next target for user Credit Card: {test_user_cc}, SSN: {test_user_ssn}")
-            # ------------------------------------------------------------------
-            
             print("[DB_Helper] Fetching next news target...")
             response = targets().select("*")\
                 .eq("category", "news")\
